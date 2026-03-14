@@ -1,0 +1,50 @@
+import os
+import time
+import requests
+import pandas as pd
+base_api_url = "https://data.cms.gov/provider-data/api/1/datastore/query"
+dataset_ids = {
+    "dsci511proj_raw_unplanned_visits": "632h-zaca",
+    "dsci511proj_raw_hospital_info": "xubh-q36u",
+    "dsci511proj_raw_hcahps": "dgck-syfz",
+    "dsci511proj_raw_prevent_med": "0330-b6e0",}
+output_dir = "data/raw"
+page_limit = 1500
+sleep_seconds = 0.5
+request_timeout = 60
+os.makedirs(output_dir, exist_ok=True)
+def fetch_dataset(dataset_id):
+    all_rows = []
+    offset = 0
+    print(f"\nfetching dataset {dataset_id}")
+    while True:
+        url = f"{base_api_url}/{dataset_id}/0"
+        params = {
+            "limit": page_limit,
+            "offset": offset,}
+        response = requests.get(url, params=params, timeout=request_timeout)
+        response.raise_for_status()
+        print(f"Request URL: {response.url}")
+        data = response.json()
+        rows = data.get("results", [])
+        if not rows:
+            print("No More Rows Returned")
+            break
+        all_rows.extend(rows)
+        print(f"Rows Fetched: {len(rows)}, Total Rows: {len(all_rows)}")
+        if len(rows) < page_limit:
+            print("Final Page Reached")
+            break
+        offset += page_limit
+        time.sleep(sleep_seconds)
+    df = pd.DataFrame(all_rows)
+    print(f"Dataset Compiled. Row Total: {len(df)}")
+    return df
+def fetch_all_datasets():
+    for table_name, dataset_id in dataset_ids.items():
+        df = fetch_dataset(dataset_id)
+        file_path = os.path.join(output_dir, f"{table_name}.csv")
+        df.to_csv(file_path, index=False)
+        print(f"Saved to: {file_path}")
+if __name__ == "__main__":
+    fetch_all_datasets()
